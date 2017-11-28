@@ -6,6 +6,7 @@ import Keyboard
 import Dict
 import List
 import Tuple
+import Random.List
 import List.Extra as ListExtra exposing (andThen)
 import Random
 import Svg
@@ -19,8 +20,12 @@ type alias Grid =
     Dict.Dict BoxCoordinates BoxPoints
 
 
+type alias GridLists =
+    List (List Box)
+
+
 type alias Model =
-    { grid : Grid
+    { grid : GridLists
     , gameScore : Int
     }
 
@@ -90,27 +95,14 @@ getBoxColor points =
             ""
 
 
-
--- generateGrid : Int -> Int -> List (List BoxCoordinates)
--- generateGrid numBoxesX numBoxesY =
---     List.range 0 (numBoxesX - 1)
---         |> List.map
---             (\x ->
---                 List.range 0 (numBoxesY - 1)
---             |> List.map (\y -> ( x, y ))
--- )
--- |> Debug.log "list"
--- g -> b -> b) -> b -> List a -> b
-
-
 generateGrid : Dict.Dict BoxCoordinates BoxPoints
 generateGrid =
     List.range 0 (numBoxes - 1)
         |> andThen
-            (\x ->
+            (\y ->
                 List.range 0 (numBoxes - 1)
                     |> andThen
-                        (\y ->
+                        (\x ->
                             [ ( ( x, y ), Hidden ) ]
                         )
             )
@@ -130,7 +122,7 @@ generateInitialBoxes listBoxCoordinates =
 
 initialModel : Model
 initialModel =
-    { grid = generateGrid
+    { grid = generateGridLists
     , gameScore = 0
     }
 
@@ -146,7 +138,7 @@ init =
 
 type Msg
     = KeyUp Int
-    | GotRandomSquare (Maybe BoxCoordinates)
+    | GotRandomSquare (Maybe Box)
     | NoOp
 
 
@@ -154,36 +146,51 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         KeyUp keyCode ->
-            ( model
-            , Random.generate GotRandomSquare <|
-                randomSquarePicker model.grid
-            )
+            let
+                _ =
+                    Debug.log "keyCode" keyCode
+            in
+                case keyCode of
+                    32 ->
+                        ( model
+                        , Random.generate GotRandomSquare <|
+                            randomSquarePickerGrid model.grid
+                        )
 
-        GotRandomSquare coordinates ->
+                    39 ->
+                        ( { model
+                            | grid = mapIndicesToCoordinates model.grid
+                          }
+                        , Cmd.none
+                        )
+
+                    _ ->
+                        ( model, Cmd.none )
+
+        GotRandomSquare square ->
             let
                 grid =
-                    coordinates
-                        |> Maybe.map (flipHiddenSquare model.grid)
+                    square
+                        |> Maybe.map (flipHiddenSquareLists model.grid)
                         |> Maybe.withDefault model.grid
-
-                -- let
-                --     _
-                --     grid =
-                --         coordinates
-                --             |> Maybe.map flipHiddenSquare
-                --         case coordinates of
-                --             Just validCoordinates ->
-                --                 List.map (flipHiddenSquare square) model.grid
-                --
-                --             Nothing ->
-                --                 model.grid
-                -- in
-                -- ( { model | grid = grid }, Cmd.none )
             in
                 ( { model | grid = grid }, Cmd.none )
 
         _ ->
             ( model, Cmd.none )
+
+
+mapIndicesToCoordinates : GridLists -> GridLists
+mapIndicesToCoordinates grid =
+    List.map reduceSquares grid
+        |> List.indexedMap
+            (\indexY row ->
+                List.indexedMap
+                    (\indexX square ->
+                        { square | coordinates = ( indexX, indexY ) }
+                    )
+                    row
+            )
 
 
 randomCoordinatesPicker : Random.Generator BoxCoordinates
@@ -211,22 +218,6 @@ randomSquarePicker grid =
             randomIndexGenerator
 
 
-
--- List.length hiddenSquares
--- |> List.length
--- |> Random.int 0
--- |> Random.map (\index ->
--- randomCoordinatesGenerator
--- |> Random.map
--- (\( x, y ) ->
--- ListExtra.getAt x grid
--- |> Maybe.andThen
--- (\row ->
--- ListExtra.getAt y row
--- )
--- )
-
-
 randomBoxPicker : List Box -> Random.Generator (Maybe Box)
 randomBoxPicker boxes =
     let
@@ -245,50 +236,104 @@ flipHiddenSquare grid coordinates =
     Dict.update coordinates (\_ -> Just (Value 2)) grid
 
 
-
--- flipHiddenSquare : Box -> List Box -> List Box
--- flipHiddenSquare hiddenSquare row =
---     List.map
---         (\possiblyHiddenSquare ->
---             if possiblyHiddenSquare.coordinates == hiddenSquare.coordinates then
---                 { possiblyHiddenSquare | points = Value 2 }
---             else
---                 possiblyHiddenSquare
---         )
---         row
--- addValue : BoxPoints -> Int
--- addValue points ->
--- case points of
--- Just points_ ->
--- points_
--- _ ->
-
-
-reduceSquares : List Box -> List Int
-reduceSquares row =
-    List.foldr
-        (\{ points } acc ->
-            case points of
-                Hidden ->
-                    acc
-
-                Value points_ ->
-                    case acc of
-                        prev :: rest ->
-                            if points_ == prev then
-                                (prev * 2) :: rest
-                            else
-                                points_ :: acc
-
-                        _ ->
-                            points_ :: acc
+flipHiddenSquareLists : GridLists -> Box -> GridLists
+flipHiddenSquareLists grid square =
+    List.map
+        (\row ->
+            List.map
+                (\square_ ->
+                    if
+                        square_
+                            == square
+                    then
+                        { square_ | points = Value 2 }
+                    else
+                        square_
+                )
+                row
         )
-        []
-        row
+        grid
+
+
+mapBoxPoints : (Int -> Int) -> BoxPoints -> BoxPoints
+mapBoxPoints func points =
+    case points of
+        Value x ->
+            Value (func x)
+
+        _ ->
+            Hidden
+
+
+reduceSquares : List Box -> List Box
+reduceSquares row =
+    let
+        reducedRow =
+            (List.foldr
+                (\square acc ->
+                    case square.points of
+                        Hidden ->
+                            acc
+
+                        Value points ->
+                            case acc of
+                                prev :: rest ->
+                                    if (Value points) == prev.points then
+                                        { prev
+                                            | points =
+                                                Value (points * 2)
+                                        }
+                                            :: rest
+                                    else
+                                        { square | points = Value points } :: acc
+
+                                _ ->
+                                    { square | points = Value points } :: acc
+                )
+                []
+                row
+            )
+    in
+        reducedRow
+            |> (-) 4
+            << List.length
+            |> flip List.append reducedRow
+            << flip List.repeat (Box ( 0, 0 ) Hidden)
+            |> Debug.log "squares"
 
 
 
--- function, startingvalue, list
+-- gridToList : Grid -> List (List (BoxCoordinates, BoxPoints))
+-- gridToList grid =
+
+
+generateGridLists : GridLists
+generateGridLists =
+    List.range 0 3
+        |> List.map (\y -> List.range 0 3 |> List.map (\x -> Box ( x, y ) Hidden))
+
+
+
+-- randomSquarePicker
+
+
+randomSquarePickerGrid : GridLists -> Random.Generator (Maybe Box)
+randomSquarePickerGrid grid =
+    List.map
+        (\row ->
+            List.filter (\square -> square.points == Hidden) row
+        )
+        grid
+        |> andThen
+            (\row ->
+                row
+                    |> andThen (\square -> [ square ])
+            )
+        |> Random.List.choose
+        |> Random.map (\( maybeSquare, _ ) -> maybeSquare)
+
+
+
 ---- VIEW ----
 
 
@@ -320,8 +365,8 @@ boardPosition =
     (backgroundSize - boardGameSize) // 2
 
 
-viewBox : ( BoxCoordinates, BoxPoints ) -> Svg.Svg msg
-viewBox ( coordinates, points ) =
+viewBox : Box -> Svg.Svg msg
+viewBox { coordinates, points } =
     Svg.svg
         [ SvgAttrs.x <| toString <| boardPosition + paddingAround + Tuple.first coordinates * (boxSize + padding)
         , SvgAttrs.y <|
@@ -350,12 +395,21 @@ viewBox ( coordinates, points ) =
 -- viewBoxes : List Box -> List (Svg.Svg msg)
 -- viewBoxes boxes =
 -- List.map viewBox boxes
+-- viewGrid : Grid -> List (Svg.Svg msg)
+-- viewGrid grid =
+-- Dict.toList grid
+-- |> List.map viewBox
 
 
-viewGrid : Grid -> List (Svg.Svg msg)
-viewGrid grid =
-    Dict.toList grid
-        |> List.map viewBox
+flattenGrid : GridLists -> List Box
+flattenGrid grid =
+    grid
+        |> andThen (\row -> row |> andThen (\square -> [ square ]))
+
+
+viewSquares : List Box -> List (Svg.Svg msg)
+viewSquares squares =
+    List.map viewBox squares
 
 
 view : Model -> Html Msg
@@ -382,7 +436,7 @@ view model =
                 ]
                 []
             ]
-                ++ viewGrid model.grid
+                ++ (viewSquares <| flattenGrid model.grid)
         ]
 
 
