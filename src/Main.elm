@@ -157,9 +157,25 @@ update msg model =
                             randomSquarePickerGrid model.grid
                         )
 
+                    37 ->
+                        ( { model | grid = moveLeft model.grid }, Cmd.none )
+
+                    38 ->
+                        ( { model | grid = moveUp model.grid }, Cmd.none )
+
                     39 ->
                         ( { model
-                            | grid = mapIndicesToCoordinates model.grid
+                            | grid = moveRight model.grid
+                          }
+                        , Cmd.none
+                        )
+
+                    40 ->
+                        ( { model | grid = moveDown model.grid }, Cmd.none )
+
+                    82 ->
+                        ( { model
+                            | grid = rotateGrid model.grid
                           }
                         , Cmd.none
                         )
@@ -180,9 +196,42 @@ update msg model =
             ( model, Cmd.none )
 
 
+moveRight : GridLists -> GridLists
+moveRight grid =
+    List.map reduceSquares grid
+        |> mapIndicesToCoordinates
+
+
+moveDown : GridLists -> GridLists
+moveDown =
+    rotateGrid
+        >> rotateGrid
+        >> rotateGrid
+        >> List.map reduceSquares
+        >> rotateGrid
+
+
+moveLeft : GridLists -> GridLists
+moveLeft =
+    rotateGrid
+        >> rotateGrid
+        >> List.map reduceSquares
+        >> rotateGrid
+        >> rotateGrid
+
+
+moveUp : GridLists -> GridLists
+moveUp grid =
+    rotateGrid grid
+        |> List.map reduceSquares
+        |> rotateGrid
+        |> rotateGrid
+        |> rotateGrid
+
+
 mapIndicesToCoordinates : GridLists -> GridLists
 mapIndicesToCoordinates grid =
-    List.map reduceSquares grid
+    grid
         |> List.indexedMap
             (\indexY row ->
                 List.indexedMap
@@ -191,6 +240,38 @@ mapIndicesToCoordinates grid =
                     )
                     row
             )
+
+
+getPointsFromCoordinates : GridLists -> Int -> Int -> BoxPoints
+getPointsFromCoordinates grid y x =
+    grid
+        |> ListExtra.getAt y
+        |> Maybe.andThen (\row -> ListExtra.getAt x row)
+        |> Maybe.map .points
+        |> Maybe.withDefault Hidden
+
+
+rotateGrid : GridLists -> GridLists
+rotateGrid grid =
+    let
+        newGrid =
+            generateGridLists
+                |> List.indexedMap
+                    (\indexY row ->
+                        List.indexedMap
+                            (\indexX square ->
+                                { square
+                                    | points =
+                                        getPointsFromCoordinates
+                                            grid
+                                            (numBoxes - 1 - indexX)
+                                            indexY
+                                }
+                            )
+                            row
+                    )
+    in
+        newGrid
 
 
 randomCoordinatesPicker : Random.Generator BoxCoordinates
@@ -242,11 +323,8 @@ flipHiddenSquareLists grid square =
         (\row ->
             List.map
                 (\square_ ->
-                    if
-                        square_
-                            == square
-                    then
-                        { square_ | points = Value 2 }
+                    if square_.coordinates == square.coordinates then
+                        square
                     else
                         square_
                 )
@@ -302,35 +380,37 @@ reduceSquares row =
             |> Debug.log "squares"
 
 
-
--- gridToList : Grid -> List (List (BoxCoordinates, BoxPoints))
--- gridToList grid =
-
-
 generateGridLists : GridLists
 generateGridLists =
     List.range 0 3
         |> List.map (\y -> List.range 0 3 |> List.map (\x -> Box ( x, y ) Hidden))
 
 
-
--- randomSquarePicker
-
-
 randomSquarePickerGrid : GridLists -> Random.Generator (Maybe Box)
 randomSquarePickerGrid grid =
-    List.map
-        (\row ->
-            List.filter (\square -> square.points == Hidden) row
-        )
-        grid
-        |> andThen
+    grid
+        |> List.concatMap
             (\row ->
-                row
-                    |> andThen (\square -> [ square ])
+                List.filter (\square -> square.points == Hidden) row
             )
+        |> Debug.log "whats here"
         |> Random.List.choose
         |> Random.map (\( maybeSquare, _ ) -> maybeSquare)
+        |> flip Random.pair (Random.int 1 10)
+        |> Random.map
+            (\( maybeSquare, num ) ->
+                let
+                    _ =
+                        Debug.log "nums" num
+
+                    points =
+                        if num < 8 then
+                            Value 2
+                        else
+                            Value 4
+                in
+                    Maybe.map (\square -> { square | points = points }) maybeSquare
+            )
 
 
 
@@ -384,21 +464,27 @@ viewBox { coordinates, points } =
         [ Svg.rect
             [ SvgAttrs.height "100%", SvgAttrs.width "100%" ]
             []
-        , Svg.text_ [ SvgAttrs.x <| toString (boxSize / 2), SvgAttrs.y <| toString (boxSize / 2), SvgAttrs.textAnchor "middle", SvgAttrs.alignmentBaseline "central" ]
-            [ text
-                "1"
+        , Svg.text_
+            [ SvgAttrs.x <| toString (boxSize / 2)
+            , SvgAttrs.y <|
+                toString (boxSize / 2)
+            , SvgAttrs.textAnchor "middle"
+            , SvgAttrs.alignmentBaseline "central"
+            , SvgAttrs.fill "white"
+            ]
+            [ viewPoints points
             ]
         ]
 
 
+viewPoints : BoxPoints -> Html.Html msg
+viewPoints points =
+    case points of
+        Value x ->
+            text <| toString x
 
--- viewBoxes : List Box -> List (Svg.Svg msg)
--- viewBoxes boxes =
--- List.map viewBox boxes
--- viewGrid : Grid -> List (Svg.Svg msg)
--- viewGrid grid =
--- Dict.toList grid
--- |> List.map viewBox
+        Hidden ->
+            text ""
 
 
 flattenGrid : GridLists -> List Box
