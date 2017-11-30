@@ -158,20 +158,30 @@ update msg model =
                         )
 
                     37 ->
-                        ( { model | grid = moveLeft model.grid }, Cmd.none )
+                        ( { model | grid = moveLeft model.grid }
+                        , Random.generate GotRandomSquare <|
+                            randomSquarePickerGrid model.grid
+                        )
 
                     38 ->
-                        ( { model | grid = moveUp model.grid }, Cmd.none )
+                        ( { model | grid = moveUp model.grid }
+                        , Random.generate GotRandomSquare <|
+                            randomSquarePickerGrid model.grid
+                        )
 
                     39 ->
                         ( { model
                             | grid = moveRight model.grid
                           }
-                        , Cmd.none
+                        , Random.generate GotRandomSquare <|
+                            randomSquarePickerGrid model.grid
                         )
 
                     40 ->
-                        ( { model | grid = moveDown model.grid }, Cmd.none )
+                        ( { model | grid = moveDown model.grid }
+                        , Random.generate GotRandomSquare <|
+                            randomSquarePickerGrid model.grid
+                        )
 
                     82 ->
                         ( { model
