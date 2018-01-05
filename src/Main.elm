@@ -353,6 +353,67 @@ mapBoxPoints func points =
             Hidden
 
 
+type alias Square =
+    { power : Int
+    , coordinates : BoxCoordinates
+    , status: Status
+    }
+
+type Status
+    = MovingTo BoxCoordinates
+    | WaitingForMerge
+    | Stationary
+
+groupBySquares : List Square -> List ( Int, Maybe Int )
+groupBySquares row =
+    List.foldr
+        (\square groupBys ->
+            case square.power of
+                0 ->
+                    groupBys
+
+                power ->
+                    handleNonZeroSquare power groupBys
+        )
+        []
+        row
+
+
+handleNonZeroSquare : Int -> List ( Int, Maybe Int ) -> List ( Int, Maybe Int )
+handleNonZeroSquare power groupBys =
+    case groupBys of
+        [] ->
+            [ ( power, Nothing ) ]
+
+        prev :: rest ->
+            case prev of
+                ( first, Nothing ) ->
+                    if first == power then
+                        ( first, Just first ) :: rest
+                    else
+                        ( power, Nothing ) :: prev :: rest
+
+                ( first, second ) ->
+                    ( power, Nothing ) :: prev :: rest
+
+getNextState : List (Int, Maybe Int) -> List Square -> List (Square, Status)
+getNextState pairs initial =
+    -- getSquareNextState : (Int, Maybe Int) -> Int -> (Square, Status)
+    -- let getSquareNextState pair pairIndex seen =
+
+    List.foldl (\square finalStates ->
+        case square.power of
+            0 ->
+                List.concat finalStates [ { square | status = Stationary } ]
+            _ ->
+                List.concat finalStates [getSquareNextState square pairs]
+    )
+    [] initial
+
+getSquareNextState square pairs seen =
+    case pairs of
+
+
 reduceSquares : List Box -> List Box
 reduceSquares row =
     let
